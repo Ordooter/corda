@@ -349,7 +349,7 @@ class InMemoryMessagingNetwork(
             state.locked { check(handlers.remove(registration as Handler)) }
         }
 
-        override fun send(message: Message, target: MessageRecipients, retry: Long?) {
+        override fun send(message: Message, target: MessageRecipients, retryId: Long?) {
             check(running)
             msgSend(this, message, target)
             if (!sendManuallyPumped) {
@@ -366,9 +366,7 @@ class InMemoryMessagingNetwork(
             netNodeHasShutdown(peerHandle)
         }
 
-        override fun cancelRetry(retryId: Long) {
-            TODO("not implemented")
-        }
+        override fun cancelRetry(retryId: Long) {}
 
         /** Returns the given (topic & session, data) pair as a newly created message object. */
         override fun createMessage(topicSession: TopicSession, data: ByteArray, uuid: UUID): Message {
