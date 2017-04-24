@@ -78,6 +78,14 @@ abstract class FlowLogic<out T> {
         return stateMachine.sendAndReceive(receiveType, otherParty, payload, sessionFlow)
     }
 
+
+    internal inline fun <reified R : Any> sendAndReceiveWithRetry(otherParty: Party, payload: Any) = sendAndReceiveWithRetry(R::class.java, otherParty, payload)
+
+    @Suspendable
+    internal open fun <R : Any> sendAndReceiveWithRetry(receiveType: Class<R>, otherParty: Party, payload: Any): UntrustworthyData<R> {
+        return stateMachine.sendAndReceive(receiveType, otherParty, payload, sessionFlow, true)
+    }
+
     /**
      * Suspends until the specified [otherParty] sends us a message of type [R].
      *
