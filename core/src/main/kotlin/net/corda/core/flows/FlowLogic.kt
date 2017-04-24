@@ -78,9 +78,15 @@ abstract class FlowLogic<out T> {
         return stateMachine.sendAndReceive(receiveType, otherParty, payload, sessionFlow)
     }
 
-
     internal inline fun <reified R : Any> sendAndReceiveWithRetry(otherParty: Party, payload: Any) = sendAndReceiveWithRetry(R::class.java, otherParty, payload)
 
+    /**
+     * Similar to [sendAndReceive] but also instructs the `payload` to be redelivered until the expected message is received.
+     * Note that this is only intended for the case when the [otherParty] is running a distributed service with an
+     * idempotent single request-response flow – e.g. a notary or certain types of oracle services. If one of more nodes
+     * in the service cluster go down mid-session, the message will be redelivered to a different one, so there is no need
+     * to wait until the initial node comes back up to obtain a response.
+     */
     @Suspendable
     internal open fun <R : Any> sendAndReceiveWithRetry(receiveType: Class<R>, otherParty: Party, payload: Any): UntrustworthyData<R> {
         return stateMachine.sendAndReceive(receiveType, otherParty, payload, sessionFlow, true)
