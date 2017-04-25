@@ -331,7 +331,7 @@ class StateMachineManager(val serviceHub: ServiceHubInternal,
                     logger.trace { "Ignoring session end message for already closed session: $message" }
                 }
             } else {
-                logger.warn("Received a session message for unknown session: $message")
+                logger.warn("Received a session message for unknown session: $message, from $sender")
             }
         }
     }
