@@ -14,7 +14,6 @@ import net.corda.core.success
 import net.corda.core.transactions.LedgerTransaction
 import net.corda.core.utilities.loggerFor
 import net.corda.core.utilities.trace
-import net.corda.core.utilities.warn
 import net.corda.node.services.RPCUserService
 import net.corda.node.services.api.MessagingServiceInternal
 import net.corda.node.services.api.MonitoringService
@@ -446,7 +445,7 @@ class NodeMessagingClient(override val config: NodeConfiguration,
     private fun sendWithRetry(retryCount: Int, address: String, message: ClientMessage, retryId: Long) {
         log.trace { "Attempting to retry #$retryCount message delivery for $retryId" }
         if (retryCount >= messageMaxRetryCount) {
-            log.warn { "Reached the maximum number of retries ($messageMaxRetryCount) for message $message redelivery to $address" }
+            log.warn("Reached the maximum number of retries ($messageMaxRetryCount) for message $message redelivery to $address")
             scheduledSendRetries.remove(retryId)
             return
         }

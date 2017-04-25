@@ -21,10 +21,6 @@ inline fun org.slf4j.Logger.debug(msg: () -> String) {
     if (isDebugEnabled) debug(msg())
 }
 
-inline fun org.slf4j.Logger.warn(msg: () -> String) {
-    if (isWarnEnabled) warn(msg())
-}
-
 /** A configuration helper that allows modifying the log level for specific loggers */
 object LogHelper {
     /**
