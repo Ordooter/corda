@@ -14,6 +14,7 @@ import net.corda.core.success
 import net.corda.core.transactions.LedgerTransaction
 import net.corda.core.utilities.loggerFor
 import net.corda.core.utilities.trace
+import net.corda.core.utilities.warn
 import net.corda.node.services.RPCUserService
 import net.corda.node.services.api.MessagingServiceInternal
 import net.corda.node.services.api.MonitoringService
@@ -107,7 +108,6 @@ class NodeMessagingClient(override val config: NodeConfiguration,
         var verificationResponseConsumer: ClientConsumer? = null
     }
 
-    val retryExecutor: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
     val scheduledSendRetries = ConcurrentHashMap<Long, ScheduledFuture<*>>()
 
     val verifierService = when (config.verifierType) {
@@ -435,7 +435,7 @@ class NodeMessagingClient(override val config: NodeConfiguration,
                 producer!!.send(mqAddress, artemisMessage)
 
                 retryId?.let {
-                    scheduledSendRetries[it] = retryExecutor.schedule({
+                    scheduledSendRetries[it] = messagingExecutor.schedule({
                         sendWithRetry(0, mqAddress, artemisMessage, it)
                     }, messageRetryDelaySeconds, TimeUnit.SECONDS)
                 }
@@ -444,9 +444,9 @@ class NodeMessagingClient(override val config: NodeConfiguration,
     }
 
     private fun sendWithRetry(retryCount: Int, address: String, message: ClientMessage, retryId: Long) {
-        log.warn("Attempting to retry #$retryCount send for $retryId")
+        log.trace { "Attempting to retry #$retryCount message delivery for $retryId" }
         if (retryCount >= messageMaxRetryCount) {
-            log.warn("Reached the maximum number of retries ($messageMaxRetryCount) for message $message redelivery to $address")
+            log.warn { "Reached the maximum number of retries ($messageMaxRetryCount) for message $message redelivery to $address" }
             scheduledSendRetries.remove(retryId)
             return
         }
@@ -458,7 +458,7 @@ class NodeMessagingClient(override val config: NodeConfiguration,
             producer!!.send(address, message)
         }
 
-        scheduledSendRetries[retryId] = retryExecutor.schedule({
+        scheduledSendRetries[retryId] = messagingExecutor.schedule({
             sendWithRetry(retryCount + 1, address, message, retryId)
         }, messageRetryDelaySeconds, TimeUnit.SECONDS)
     }
@@ -469,7 +469,7 @@ class NodeMessagingClient(override val config: NodeConfiguration,
 
     override fun cancelRetry(retryId: Long) {
         scheduledSendRetries[retryId]?.let {
-            log.warn("Cancelling retry for $retryId")
+            log.trace { "Cancelling message redelivery for retry id $retryId" }
             it.cancel(true)
             scheduledSendRetries.remove(retryId)
         }

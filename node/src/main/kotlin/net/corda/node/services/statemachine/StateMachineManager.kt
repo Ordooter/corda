@@ -300,12 +300,12 @@ class StateMachineManager(val serviceHub: ServiceHubInternal,
         val session = openSessions[message.recipientSessionId]
         if (session != null) {
             session.fiber.logger.trace { "Received $message on $session from $sender" }
-            if (session.idempotent) {
+            if (session.retryable) {
                 if (message is SessionConfirm && session.state is FlowSessionState.Initiated) {
                     session.fiber.logger.trace { "Ignoring duplicate confirmation for session ${session.ourSessionId} – session is idempotent" }
                     return
                 }
-                if (message is SessionEnd || message is SessionData) {
+                if (message !is SessionConfirm) {
                     serviceHub.networkService.cancelRetry(session.ourSessionId)
                 }
             }
@@ -528,7 +528,7 @@ class StateMachineManager(val serviceHub: ServiceHubInternal,
         val retryId = if (ioRequest.message is SessionInit) {
             with(ioRequest.session) {
                 openSessions[ourSessionId] = this
-                if (idempotent) ourSessionId else null
+                if (retryable) ourSessionId else null
             }
         } else null
         sendSessionMessage(ioRequest.session.state.sendToParty, ioRequest.message, ioRequest.session.fiber, retryId)
@@ -563,7 +563,7 @@ class StateMachineManager(val serviceHub: ServiceHubInternal,
                 ?: throw IllegalArgumentException("Don't know about party $party")
         val address = serviceHub.networkService.getAddressOfParty(partyInfo)
         val logger = fiber?.logger ?: logger
-        logger.trace { "Sending $message to party $party @ $address" }
+        logger.trace { "Sending $message to party $party @ $address" + if (retryId != null) " with retry $retryId" else "" }
         serviceHub.networkService.send(sessionTopic, message, address, retryId = retryId)
     }
 }
