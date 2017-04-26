@@ -23,8 +23,6 @@ import org.junit.Test
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class P2PMessagingTest : NodeBasedTest() {
     @Test
@@ -99,16 +97,17 @@ class P2PMessagingTest : NodeBasedTest() {
 
         val dummyTopic = "dummy.topic"
         val responseMessage = "response"
-        val ignoreRequest = AtomicBoolean(true)
+        val firstToReceive = AtomicBoolean(true)
 
         distributedServiceNodes.forEach {
             it.net.apply {
+                var ignoreRequests = false
                 addMessageHandler(dummyTopic, DEFAULT_SESSION_ID) { netMessage, _ ->
-                    val ignore = ignoreRequest.getAndSet(false)
-                    if (ignore) {
-                        // The first request received by the distributed service is ignored to simulate a service node
-                        // crashing before sending back a response. A retry by the client will result in the message
-                        // being redelivered to another node in the service cluster.
+                    // The node which receives the first request will ignore all requests
+                    if (firstToReceive.getAndSet(false)) ignoreRequests = true
+                    if (ignoreRequests) {
+                        // Requests are ignored to simulate a service node crashing before sending back a response.
+                        // A retry by the client will result in the message being redelivered to another node in the service cluster.
                     } else {
                         val request = netMessage.data.deserialize<TestRequest>()
                         val response = createMessage(dummyTopic, request.sessionID, responseMessage.serialize().bytes)
@@ -117,8 +116,6 @@ class P2PMessagingTest : NodeBasedTest() {
                 }
             }
         }
-
-        assertTrue(ignoreRequest.get())
 
         // Send a single request with retry
         val response = with(alice.net) {
@@ -130,7 +127,6 @@ class P2PMessagingTest : NodeBasedTest() {
         }.getOrThrow(10.seconds)
 
         assertEquals(response, responseMessage)
-        assertFalse(ignoreRequest.get())
     }
 
     private fun assertAllNodesAreUsed(participatingServiceNodes: List<Node>, serviceName: String, originatingNode: Node) {
