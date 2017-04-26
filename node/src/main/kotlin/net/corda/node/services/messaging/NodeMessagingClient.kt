@@ -89,7 +89,6 @@ class NodeMessagingClient(override val config: NodeConfiguration,
         private val amqDelayMillis = System.getProperty("amq.delivery.delay.ms", "0").toInt()
         private val verifierResponseAddress = "$VERIFICATION_RESPONSES_QUEUE_NAME_PREFIX.${random63BitValue()}"
 
-        private val messageRetryDelaySeconds: Long = 30
         private val messageMaxRetryCount: Int = 3
     }
 
@@ -436,7 +435,7 @@ class NodeMessagingClient(override val config: NodeConfiguration,
                 retryId?.let {
                     scheduledSendRetries[it] = messagingExecutor.schedule({
                         sendWithRetry(0, mqAddress, artemisMessage, it)
-                    }, messageRetryDelaySeconds, TimeUnit.SECONDS)
+                    }, config.messageRetryDelaySeconds, TimeUnit.SECONDS)
                 }
             }
         }
@@ -459,7 +458,7 @@ class NodeMessagingClient(override val config: NodeConfiguration,
 
         scheduledSendRetries[retryId] = messagingExecutor.schedule({
             sendWithRetry(retryCount + 1, address, message, retryId)
-        }, messageRetryDelaySeconds, TimeUnit.SECONDS)
+        }, config.messageRetryDelaySeconds, TimeUnit.SECONDS)
     }
 
     private fun randomiseDuplicateId(message: ClientMessage) {

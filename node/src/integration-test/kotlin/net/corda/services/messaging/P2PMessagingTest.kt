@@ -3,9 +3,7 @@ package net.corda.services.messaging
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import net.corda.core.*
-import net.corda.core.messaging.MessageRecipients
-import net.corda.core.messaging.SingleMessageRecipient
-import net.corda.core.messaging.createMessage
+import net.corda.core.messaging.*
 import net.corda.core.node.services.DEFAULT_SESSION_ID
 import net.corda.core.node.services.ServiceInfo
 import net.corda.core.serialization.CordaSerializable
@@ -23,6 +21,10 @@ import net.corda.testing.node.NodeBasedTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
 import java.util.*
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class P2PMessagingTest : NodeBasedTest() {
     @Test
@@ -85,6 +87,50 @@ class P2PMessagingTest : NodeBasedTest() {
         val serviceName = "Distributed Service"
         val distributedService = startNotaryCluster(serviceName, 2).getOrThrow()
         assertAllNodesAreUsed(distributedService, serviceName, distributedService[0])
+    }
+
+    @Test
+    fun `distributed service requests are retried if one of the nodes in the cluster goes down without sending a response`() {
+        val distributedServiceNodes = startNotaryCluster("DistributedService", 3).getOrThrow()
+        val alice = startNode(ALICE.name, configOverrides = mapOf("messageRetryDelaySeconds" to 5)).getOrThrow()
+        val serviceAddress = alice.services.networkMapCache.run {
+            alice.net.getAddressOfParty(getPartyInfo(getAnyNotary()!!)!!)
+        }
+
+        val dummyTopic = "dummy.topic"
+        val responseMessage = "response"
+        val ignoreRequest = AtomicBoolean(true)
+
+        distributedServiceNodes.forEach {
+            it.net.apply {
+                addMessageHandler(dummyTopic, DEFAULT_SESSION_ID) { netMessage, _ ->
+                    val ignore = ignoreRequest.getAndSet(false)
+                    if (ignore) {
+                        // The first request received by the distributed service is ignored to simulate a service node
+                        // crashing before sending back a response. A retry by the client will result in the message
+                        // being redelivered to another node in the service cluster.
+                    } else {
+                        val request = netMessage.data.deserialize<TestRequest>()
+                        val response = createMessage(dummyTopic, request.sessionID, responseMessage.serialize().bytes)
+                        send(response, request.replyTo)
+                    }
+                }
+            }
+        }
+
+        assertTrue(ignoreRequest.get())
+
+        // Send a single request with retry
+        val response = with(alice.net) {
+            val request = TestRequest(replyTo = myAddress)
+            val responseFuture = onNext<Any>(dummyTopic, request.sessionID)
+            val msg = createMessage(TopicSession(dummyTopic), data = request.serialize().bytes)
+            send(msg, serviceAddress, retryId = request.sessionID)
+            responseFuture
+        }.getOrThrow(10.seconds)
+
+        assertEquals(response, responseMessage)
+        assertFalse(ignoreRequest.get())
     }
 
     private fun assertAllNodesAreUsed(participatingServiceNodes: List<Node>, serviceName: String, originatingNode: Node) {
