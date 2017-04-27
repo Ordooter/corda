@@ -154,7 +154,7 @@ class Node {
     }
 
     void build(File rootDir) {
-        nodeDir = new File(rootDir, name.replaceAll("\\s","").replaceAll(",", ""))
+        nodeDir = new File(rootDir, name.split(",")[0].replaceAll("\\s",""))
         configureRpcUsers()
         installCordaJar()
         installWebserverJar()
