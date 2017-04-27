@@ -1,7 +1,5 @@
 package net.corda.node.services
 
-import com.google.common.util.concurrent.Futures
-import com.google.common.util.concurrent.ListenableFuture
 import net.corda.core.bufferUntilSubscribed
 import net.corda.core.contracts.Amount
 import net.corda.core.contracts.POUNDS
@@ -12,7 +10,6 @@ import net.corda.core.messaging.StateMachineUpdate
 import net.corda.core.messaging.startFlow
 import net.corda.core.node.NodeInfo
 import net.corda.core.serialization.OpaqueBytes
-import net.corda.core.transactions.SignedTransaction
 import net.corda.core.utilities.ALICE
 import net.corda.core.utilities.DUMMY_NOTARY
 import net.corda.flows.CashIssueFlow
@@ -108,21 +105,27 @@ class DistributedServiceTests : DriverBasedTest() {
     // TODO This should be in RaftNotaryServiceTests
     @Test
     fun `cluster survives if a notary is killed`() {
-        val totalPayments = 20
-        for (i in 1..totalPayments) issueCash(1.POUNDS)
-        val paySelfFutures = (1..totalPayments / 2).map { paySelfAsync(1.POUNDS) }
+        // Issue 100 pounds, then pay ourselves 10x5 pounds
+        issueCash(100.POUNDS)
+
+        for (i in 1..10) {
+            paySelf(5.POUNDS)
+        }
 
         // Now kill a notary
-        notaries[0].process.destroy()
+        with(notaries[0].process) {
+            destroy()
+            waitFor()
+        }
 
-        val paySelfFutures2 = (1..totalPayments / 2).map { paySelfAsync(1.POUNDS) }
-
-        Futures.allAsList(paySelfFutures).getOrThrow()
-        Futures.allAsList(paySelfFutures2).getOrThrow()
+        // Pay ourselves another 20x5 pounds
+        for (i in 1..20) {
+            paySelf(5.POUNDS)
+        }
 
         val notarisationsPerNotary = HashMap<Party, Int>()
         notaryStateMachines.expectEvents(isStrict = false) {
-            replicate<Pair<NodeInfo, StateMachineUpdate>>(totalPayments) {
+            replicate<Pair<NodeInfo, StateMachineUpdate>>(30) {
                 expect(match = { it.second is StateMachineUpdate.Added }) {
                     val (notary, update) = it
                     update as StateMachineUpdate.Added
@@ -145,9 +148,5 @@ class DistributedServiceTests : DriverBasedTest() {
     private fun paySelf(amount: Amount<Currency>) {
         val payHandle = aliceProxy.startFlow(::CashPaymentFlow, amount, alice.nodeInfo.legalIdentity)
         payHandle.returnValue.getOrThrow()
-    }
-
-    private fun paySelfAsync(amount: Amount<Currency>): ListenableFuture<SignedTransaction> {
-        return aliceProxy.startFlow(::CashPaymentFlow, amount, alice.nodeInfo.legalIdentity).returnValue
     }
 }
