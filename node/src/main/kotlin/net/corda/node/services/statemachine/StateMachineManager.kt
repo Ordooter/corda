@@ -306,7 +306,7 @@ class StateMachineManager(val serviceHub: ServiceHubInternal,
                     return
                 }
                 if (message !is SessionConfirm) {
-                    serviceHub.networkService.cancelRetry(session.ourSessionId)
+                    serviceHub.networkService.cancelRedelivery(session.ourSessionId)
                 }
             }
             if (message is SessionEnd) {

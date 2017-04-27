@@ -32,7 +32,7 @@ interface NodeConfiguration : SSLConfiguration {
     val certificateSigningService: URL
     val certificateChainCheckPolicies: List<CertChainPolicyConfig>
     val verifierType: VerifierType
-    val messageRetryDelaySeconds: Long
+    val messageRedeliveryDelaySeconds: Long
 }
 
 data class FullNodeConfiguration(
@@ -52,7 +52,7 @@ data class FullNodeConfiguration(
         override val minimumPlatformVersion: Int = 1,
         override val rpcUsers: List<User>,
         override val verifierType: VerifierType,
-        override val messageRetryDelaySeconds: Long = 30,
+        override val messageRedeliveryDelaySeconds: Long = 30,
         val useHTTPS: Boolean,
         @OldConfig("artemisAddress")
         val p2pAddress: HostAndPort,

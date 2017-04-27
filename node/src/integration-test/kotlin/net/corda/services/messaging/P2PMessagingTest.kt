@@ -89,8 +89,8 @@ class P2PMessagingTest : NodeBasedTest() {
 
     @Test
     fun `distributed service requests are retried if one of the nodes in the cluster goes down without sending a response`() {
-        val distributedServiceNodes = startNotaryCluster("DistributedService", 3).getOrThrow()
-        val alice = startNode(ALICE.name, configOverrides = mapOf("messageRetryDelaySeconds" to 5)).getOrThrow()
+        val distributedServiceNodes = startNotaryCluster("DistributedService", 2).getOrThrow()
+        val alice = startNode(ALICE.name, configOverrides = mapOf("messageRedeliveryDelaySeconds" to 1)).getOrThrow()
         val serviceAddress = alice.services.networkMapCache.run {
             alice.net.getAddressOfParty(getPartyInfo(getAnyNotary()!!)!!)
         }
@@ -100,15 +100,19 @@ class P2PMessagingTest : NodeBasedTest() {
         val firstToReceive = AtomicBoolean(true)
 
         distributedServiceNodes.forEach {
+            val nodeName = it.info.legalIdentity.name
             it.net.apply {
                 var ignoreRequests = false
                 addMessageHandler(dummyTopic, DEFAULT_SESSION_ID) { netMessage, _ ->
                     // The node which receives the first request will ignore all requests
                     if (firstToReceive.getAndSet(false)) ignoreRequests = true
+                    print("$nodeName: Received request - ")
                     if (ignoreRequests) {
+                        println("ignoring")
                         // Requests are ignored to simulate a service node crashing before sending back a response.
                         // A retry by the client will result in the message being redelivered to another node in the service cluster.
                     } else {
+                        println("sending response")
                         val request = netMessage.data.deserialize<TestRequest>()
                         val response = createMessage(dummyTopic, request.sessionID, responseMessage.serialize().bytes)
                         send(response, request.replyTo)

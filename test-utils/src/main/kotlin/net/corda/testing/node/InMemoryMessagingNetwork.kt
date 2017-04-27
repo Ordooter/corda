@@ -366,7 +366,7 @@ class InMemoryMessagingNetwork(
             netNodeHasShutdown(peerHandle)
         }
 
-        override fun cancelRetry(retryId: Long) {}
+        override fun cancelRedelivery(retryId: Long) {}
 
         /** Returns the given (topic & session, data) pair as a newly created message object. */
         override fun createMessage(topicSession: TopicSession, data: ByteArray, uuid: UUID): Message {

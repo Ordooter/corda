@@ -106,7 +106,11 @@ class NodeMessagingClient(override val config: NodeConfiguration,
         var verificationResponseConsumer: ClientConsumer? = null
     }
 
-    val scheduledSendRetries = ConcurrentHashMap<Long, ScheduledFuture<*>>()
+    val messagesToRedeliver = database.transaction {
+        JDBCHashMap<Long, Pair<Message, MessageRecipients>>("${NODE_DATABASE_PREFIX}message_retry", true)
+    }
+
+    val scheduledMessageRedeliveries = ConcurrentHashMap<Long, ScheduledFuture<*>>()
 
     val verifierService = when (config.verifierType) {
         VerifierType.InMemory -> InMemoryTransactionVerifierService(numberOfWorkers = 4)
@@ -201,6 +205,8 @@ class NodeMessagingClient(override val config: NodeConfiguration,
                 messagingExecutor.scheduleAtFixedRate(::checkVerifierCount, 0, 10, TimeUnit.SECONDS)
             }
         }
+
+        resumeMessageRedelivery()
     }
 
     /**
@@ -215,6 +221,12 @@ class NodeMessagingClient(override val config: NodeConfiguration,
             session.createConsumer(P2P_QUEUE, messageFilter)
         } else
             session.createConsumer(P2P_QUEUE)
+    }
+
+    private fun resumeMessageRedelivery() {
+        messagesToRedeliver.forEach {
+            retryId, (message, target) -> send(message, target, retryId)
+        }
     }
 
     private var shutdownLatch = CountDownLatch(1)
@@ -433,19 +445,25 @@ class NodeMessagingClient(override val config: NodeConfiguration,
                 producer!!.send(mqAddress, artemisMessage)
 
                 retryId?.let {
-                    scheduledSendRetries[it] = messagingExecutor.schedule({
+                    database.transaction { messagesToRedeliver.computeIfAbsent(it, { Pair(message, target) }) }
+                    scheduledMessageRedeliveries[it] = messagingExecutor.schedule({
                         sendWithRetry(0, mqAddress, artemisMessage, it)
-                    }, config.messageRetryDelaySeconds, TimeUnit.SECONDS)
+                    }, config.messageRedeliveryDelaySeconds, TimeUnit.SECONDS)
+
                 }
             }
         }
     }
 
     private fun sendWithRetry(retryCount: Int, address: String, message: ClientMessage, retryId: Long) {
+        fun randomiseDuplicateId(message: ClientMessage) {
+            message.putStringProperty(HDR_DUPLICATE_DETECTION_ID, SimpleString(UUID.randomUUID().toString()))
+        }
+
         log.trace { "Attempting to retry #$retryCount message delivery for $retryId" }
         if (retryCount >= messageMaxRetryCount) {
             log.warn("Reached the maximum number of retries ($messageMaxRetryCount) for message $message redelivery to $address")
-            scheduledSendRetries.remove(retryId)
+            scheduledMessageRedeliveries.remove(retryId)
             return
         }
 
@@ -456,20 +474,17 @@ class NodeMessagingClient(override val config: NodeConfiguration,
             producer!!.send(address, message)
         }
 
-        scheduledSendRetries[retryId] = messagingExecutor.schedule({
+        scheduledMessageRedeliveries[retryId] = messagingExecutor.schedule({
             sendWithRetry(retryCount + 1, address, message, retryId)
-        }, config.messageRetryDelaySeconds, TimeUnit.SECONDS)
+        }, config.messageRedeliveryDelaySeconds, TimeUnit.SECONDS)
     }
 
-    private fun randomiseDuplicateId(message: ClientMessage) {
-        message.putStringProperty(HDR_DUPLICATE_DETECTION_ID, SimpleString(UUID.randomUUID().toString()))
-    }
-
-    override fun cancelRetry(retryId: Long) {
-        scheduledSendRetries[retryId]?.let {
+    override fun cancelRedelivery(retryId: Long) {
+        database.transaction { messagesToRedeliver.remove(retryId) }
+        scheduledMessageRedeliveries[retryId]?.let {
             log.trace { "Cancelling message redelivery for retry id $retryId" }
-            it.cancel(true)
-            scheduledSendRetries.remove(retryId)
+            if (!it.isDone) it.cancel(true)
+            scheduledMessageRedeliveries.remove(retryId)
         }
     }
 

@@ -168,7 +168,7 @@ data class TestNodeConfiguration(
         override val certificateSigningService: URL = URL("http://localhost"),
         override val certificateChainCheckPolicies: List<CertChainPolicyConfig> = emptyList(),
         override val verifierType: VerifierType = VerifierType.InMemory,
-        override val messageRetryDelaySeconds: Long = 5) : NodeConfiguration
+        override val messageRedeliveryDelaySeconds: Long = 5) : NodeConfiguration
 
 fun testConfiguration(baseDirectory: Path, legalName: String, basePort: Int): FullNodeConfiguration {
     return FullNodeConfiguration(

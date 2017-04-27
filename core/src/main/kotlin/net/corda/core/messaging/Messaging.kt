@@ -73,13 +73,13 @@ interface MessagingService {
      * There is no way to know if a message has been received. If your flow requires this, you need the recipient
      * to send an ACK message back.
      *
-     * @param retryId if provided the message will be scheduled for redelivery until [cancelRetry] is called for this id.
+     * @param retryId if provided the message will be scheduled for redelivery until [cancelRedelivery] is called for this id.
      * Note that this feature should only be used when the target is an idempotent distributed service, e.g. a notary.
      */
     fun send(message: Message, target: MessageRecipients, retryId: Long? = null)
 
     /** Cancels the scheduled message redelivery for the specified [retryId] */
-    fun cancelRetry(retryId: Long)
+    fun cancelRedelivery(retryId: Long)
 
     /**
      * Returns an initialised [Message] with the current time, etc, already filled in.
