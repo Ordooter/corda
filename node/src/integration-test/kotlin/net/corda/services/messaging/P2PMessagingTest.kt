@@ -22,7 +22,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.test.assertEquals
+import java.util.concurrent.atomic.AtomicInteger
 
 class P2PMessagingTest : NodeBasedTest() {
     @Test
@@ -97,13 +97,71 @@ class P2PMessagingTest : NodeBasedTest() {
 
         val dummyTopic = "dummy.topic"
         val responseMessage = "response"
-        val firstToReceive = AtomicBoolean(true)
 
+        simulateCrashingNode(distributedServiceNodes, dummyTopic, responseMessage)
+
+        // Send a single request with retry
+        val response = with(alice.net) {
+            val request = TestRequest(replyTo = myAddress)
+            val responseFuture = onNext<Any>(dummyTopic, request.sessionID)
+            val msg = createMessage(TopicSession(dummyTopic), data = request.serialize().bytes)
+            send(msg, serviceAddress, retryId = request.sessionID)
+            responseFuture
+        }.getOrThrow(10.seconds)
+
+        assertThat(response).isEqualTo(responseMessage)
+    }
+
+    @Test
+    fun `distributed service request retries are persisted across client node restarts`() {
+        val distributedServiceNodes = startNotaryCluster("DistributedService", 2).getOrThrow()
+        val alice = startNode(ALICE.name, configOverrides = mapOf("messageRedeliveryDelaySeconds" to 1)).getOrThrow()
+        val serviceAddress = alice.services.networkMapCache.run {
+            alice.net.getAddressOfParty(getPartyInfo(getAnyNotary()!!)!!)
+        }
+
+        val dummyTopic = "dummy.topic"
+        val responseMessage = "response"
+
+        val requestsReceived = simulateCrashingNode(distributedServiceNodes, dummyTopic, responseMessage)
+
+        val sessionId = random63BitValue()
+
+        // Send a single request with retry
+        with(alice.net) {
+            val request = TestRequest(sessionId, myAddress)
+            val msg = createMessage(TopicSession(dummyTopic), data = request.serialize().bytes)
+            send(msg, serviceAddress, retryId = request.sessionID)
+        }
+
+        // Wait until the first request is received
+        while (requestsReceived.get() == 0) Thread.sleep(100)
+        // Stop alice's node before the request is redelivered – the first request is ignored
+        alice.stop()
+        assertThat(requestsReceived.get()).isEqualTo(1)
+
+        // Restart the node and expect a response
+        val aliceRestarted = startNode(ALICE.name, configOverrides = mapOf("messageRedeliveryDelaySeconds" to 1)).getOrThrow()
+        val response = aliceRestarted.net.onNext<Any>(dummyTopic, sessionId).getOrThrow(5.seconds)
+
+        assertThat(requestsReceived.get()).isGreaterThanOrEqualTo(2)
+        assertThat(response).isEqualTo(responseMessage)
+    }
+
+    /**
+     * Sets up the [distributedServiceNodes] to respond to [dummyTopic] requests. The first node in the service to
+     * receive a request will ignore it and all subsequent requests. This simulates the scenario where a node receives
+     * a request message, but crashes before sending back a response. The other nodes will respond to _all_ requests.
+     */
+    private fun simulateCrashingNode(distributedServiceNodes: List<Node>, dummyTopic: String, responseMessage: String): AtomicInteger {
+        val firstToReceive = AtomicBoolean(true)
+        val requestsReceived = AtomicInteger(0)
         distributedServiceNodes.forEach {
             val nodeName = it.info.legalIdentity.name
             it.net.apply {
                 var ignoreRequests = false
                 addMessageHandler(dummyTopic, DEFAULT_SESSION_ID) { netMessage, _ ->
+                    requestsReceived.incrementAndGet()
                     // The node which receives the first request will ignore all requests
                     if (firstToReceive.getAndSet(false)) ignoreRequests = true
                     print("$nodeName: Received request - ")
@@ -120,17 +178,7 @@ class P2PMessagingTest : NodeBasedTest() {
                 }
             }
         }
-
-        // Send a single request with retry
-        val response = with(alice.net) {
-            val request = TestRequest(replyTo = myAddress)
-            val responseFuture = onNext<Any>(dummyTopic, request.sessionID)
-            val msg = createMessage(TopicSession(dummyTopic), data = request.serialize().bytes)
-            send(msg, serviceAddress, retryId = request.sessionID)
-            responseFuture
-        }.getOrThrow(10.seconds)
-
-        assertEquals(response, responseMessage)
+        return requestsReceived
     }
 
     private fun assertAllNodesAreUsed(participatingServiceNodes: List<Node>, serviceName: String, originatingNode: Node) {
