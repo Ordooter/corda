@@ -1,11 +1,13 @@
 Release notes
 =============
 
-Here are release notes for each snapshot release from M9 onwards. This includes guidance on how to upgrade code from
-the previous milestone release.
+Here are release notes for each snapshot release from M9 onwards.
 
 Unreleased
 ----------
+
+Milestone 11
+------------
 
 Work has continued on confidential identities, introducing code to enable the Java standard libraries to work with
 composite key signatures. This will form the underlying basis of future work to standardise the public key and signature
@@ -25,14 +27,20 @@ enforced, however it will be in a later milestone.
 
 We anticipate enforcing the use of distinguished names in node configurations from M12, and across the network from M13.
 
-We have updated DemoBench so that it is installed as "Corda DemoBench" for both Windows and MacOSX. The original version
-was installed as just "DemoBench", and so will not be overwritten automatically by the new version.
+Contract attachments can now be up to 10 MB in size.
+
+The node now disables any use of ObjectInputStream, to prevent Java deserialisation within flows.
 
 We've introduced the concept of platform version which is a single integer value which increments by 1 if a release changes
 any of the public APIs of the entire Corda platform. This includes the node's public APIs, the messaging protocol,
 serialisation, etc. The node exposes the platform version it's on and we envision CorDapps will use this to be able to
 run on older versions of the platform to the one they were compiled against. Platform version borrows heavily from Android's
 API Level.
+
+We have revamped the DemoBench user interface. DemoBench will now also be installed as "Corda DemoBench" for both Windows and MacOSX. The original version
+was installed as just "DemoBench", and so will not be overwritten automatically by the new version.
+
+Corda now requires JDK 8u131 or above in order to run.
 
 Milestone 10
 ------------
@@ -50,6 +58,7 @@ We have many enhancements planned over time including SSH access, more commands 
 The new "DemoBench" makes it easy to configure and launch local Corda nodes. It is a standalone desktop app that can be
 bundled with its own JRE and packaged as either EXE (Windows), DMG (MacOS) or RPM (Linux-based). It has the following
 features:
+
  #. New nodes can be added at the click of a button. Clicking "Add node" creates a new tab that lets you edit the most
     important configuration properties of the node before launch, such as its legal name and which CorDapps will be loaded.
  #. Each tab contains a terminal emulator, attached to the pseudoterminal of the node. This lets you see console output.

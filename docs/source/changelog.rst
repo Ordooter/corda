@@ -1,10 +1,13 @@
 Changelog
 =========
 
-Here are brief summaries of what's changed between each snapshot release.
+Here are brief summaries of what's changed between each snapshot release. This includes guidance on how to upgrade code from the previous milestone release.
 
 UNRELEASED
 ----------
+
+Milestone 11.0
+--------------
 
 * API changes:
     * Added extension function ``Database.transaction`` to replace ``databaseTransaction``, which is now deprecated.
@@ -16,6 +19,26 @@ UNRELEASED
 
     * Moved ``generateSpend`` and ``generateExit`` functions into ``OnLedgerAsset`` from the vault and
       ``AbstractConserveAmount`` clauses respectively.
+
+* Corda now requires JDK 8u131 or above in order to run. Our Kotlin now also compiles to JDK8 bytecode, and so you'll need to update your CorDapp projects to do the same. E.g. by adding this to ``build.gradle``:
+
+.. parsed-literal::
+
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+        kotlinOptions {
+            languageVersion = "1.1"
+            apiVersion = "1.1"
+            jvmTarget = "1.8"
+        }
+    }
+
+..
+
+ or by adjusting ``Settings/Build,Execution,Deployment/Compiler/KotlinCompiler`` in IntelliJ::
+
+ -  Language Version: 1.1
+ -  API Version: 1.1
+ -  Target JVM Version: 1.8
 
 * DemoBench is now installed as ``Corda DemoBench`` instead of ``DemoBench``.
 
@@ -373,7 +396,7 @@ New features in this release:
       are trees of public keys in which interior nodes can have validity thresholds attached, thus allowing
       boolean formulas of keys to be created. This is similar to Bitcoin's multi-sig support and the data model
       is the same as the InterLedger Crypto-Conditions spec, which should aid interop in future. Read more about
-      key trees in the ":doc:`transaction-data-types`" article.
+      key trees in the ":doc:`key-concepts-core-types`" article.
     * A new tutorial has been added showing how to use transaction attachments in more detail.
 
 * Testnet
@@ -548,8 +571,8 @@ Highlights of this release:
 We have new documentation on:
 
 * :doc:`event-scheduling`
-* :doc:`transaction-data-types`
-* :doc:`consensus`
+* :doc:`key-concepts-core-types`
+* :doc:`key-concepts-consensus-notaries`
 
 Summary of API changes (not exhaustive):
 
